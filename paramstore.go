@@ -42,12 +42,19 @@ func Provider(cfg Config, cb func(s string) string) *ParamStore {
 		return nil
 	}
 
+	// Initialize delimiter string
 	if cfg.Delimiter == "" {
 		cfg.Delimiter = "/"
 	}
 
+	// Initialize AWS region
 	if cfg.AWSRegion != "" {
 		c.Region = cfg.AWSRegion
+	}
+
+	// Initialize watch interval
+	if cfg.WatchInterval == 0 {
+		cfg.WatchInterval = 600 * time.Second
 	}
 
 	// Check if AWS access key ID and secret key are specified
@@ -131,11 +138,6 @@ func (ps *ParamStore) ReadBytes() ([]byte, error) {
 }
 
 func (ps *ParamStore) Watch(cb func(event interface{}, err error)) error {
-	// Initialize watch interval
-	if ps.config.WatchInterval == 0 {
-		ps.config.WatchInterval = 600 * time.Second
-	}
-
 	go func() {
 		// Start new ticker
 		ticker := time.NewTicker(ps.config.WatchInterval)
