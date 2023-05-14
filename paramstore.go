@@ -145,8 +145,10 @@ func (ps *ParamStore) Watch(cb func(event interface{}, err error)) error {
 
 	main:
 		for range ticker.C {
-			// Initialize parameters slice
+			// Initialize slice to store parameters fetched from API
 			var params []types.Parameter
+			// Initialize slice to store updated parameters
+			var updatedParams []types.Parameter
 
 			// Fetch all parameters from API
 			for {
@@ -167,17 +169,19 @@ func (ps *ParamStore) Watch(cb func(event interface{}, err error)) error {
 				}
 			}
 
-			// Check for changes
+			// Check for updates
 			for _, newParam := range params {
 				// Find parameter in previously saved parameters
 				for _, p := range ps.params {
 					if *p.ARN == *newParam.ARN && newParam.Version != p.Version {
-						// Trigger update
-						cb(nil, nil)
-
-						continue main
+						updatedParams = append(updatedParams, newParam)
 					}
 				}
+			}
+
+			if len(updatedParams) > 0 {
+				// Trigger update
+				cb(updatedParams, nil)
 			}
 		}
 	}()
