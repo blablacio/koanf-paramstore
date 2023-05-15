@@ -31,10 +31,10 @@ type ParamStore struct {
 	config Config
 	input  ssm.GetParametersByPathInput
 	params []types.Parameter
-	cb     func(s string) string
+	cb     func(k, v string) (string, interface{})
 }
 
-func Provider(cfg Config, cb func(s string) string) *ParamStore {
+func Provider(cfg Config, cb func(k string) string) *ParamStore {
 	// Load the default config
 	c, err := config.LoadDefaultConfig(context.Background())
 
@@ -71,11 +71,71 @@ func Provider(cfg Config, cb func(s string) string) *ParamStore {
 
 	client := ssm.NewFromConfig(c)
 
-	return &ParamStore{client: client, config: cfg, cb: cb}
+	ps := &ParamStore{client: client, config: cfg}
+
+	if cb != nil {
+		ps.cb = func(key, value string) (string, interface{}) {
+			return cb(key), value
+		}
+	}
+
+	return ps
+}
+
+func ProviderWithValue(cfg Config, cb func(key string, value string) (string, interface{})) *ParamStore {
+	// Load the default config
+	c, err := config.LoadDefaultConfig(context.Background())
+
+	if err != nil {
+		return nil
+	}
+
+	// Initialize delimiter string
+	if cfg.Delimiter == "" {
+		cfg.Delimiter = "/"
+	}
+
+	// Initialize AWS region
+	if cfg.AWSRegion != "" {
+		c.Region = cfg.AWSRegion
+	}
+
+	// Initialize watch interval
+	if cfg.WatchInterval == 0 {
+		cfg.WatchInterval = 600 * time.Second
+	}
+
+	// Check if AWS access key ID and secret key are specified
+	if cfg.AWSAccessKeyID != "" && cfg.AWSSecretAccessKey != "" {
+		c.Credentials = credentials.NewStaticCredentialsProvider(cfg.AWSAccessKeyID, cfg.AWSSecretAccessKey, "")
+	}
+
+	// Check if AWS role ARN is present
+	if cfg.AWSRoleARN != "" {
+		stsSvc := sts.NewFromConfig(c)
+		credentials := stscreds.NewAssumeRoleProvider(stsSvc, cfg.AWSRoleARN)
+		c.Credentials = aws.NewCredentialsCache(credentials)
+	}
+
+	client := ssm.NewFromConfig(c)
+
+	return &ParamStore{
+		client: client,
+		config: cfg,
+		cb:     cb,
+	}
 }
 
 func ProviderWithClient(cfg Config, cb func(s string) string, client *ssm.Client) *ParamStore {
-	return &ParamStore{client: client, config: cfg, cb: cb}
+	ps := &ParamStore{client: client, config: cfg}
+
+	if cb != nil {
+		ps.cb = func(key, value string) (string, interface{}) {
+			return cb(key), value
+		}
+	}
+
+	return ps
 }
 
 func (ps *ParamStore) Read() (map[string]interface{}, error) {
@@ -116,10 +176,11 @@ func (ps *ParamStore) Read() (map[string]interface{}, error) {
 
 	for _, param := range params {
 		key := *param.Name
+		var value any
 
 		// Transform key if transformer is provided
 		if ps.cb != nil {
-			key = ps.cb(key)
+			key, value = ps.cb(key, *param.Value)
 		}
 
 		if key == "" {
@@ -127,7 +188,7 @@ func (ps *ParamStore) Read() (map[string]interface{}, error) {
 		}
 
 		// Set key value
-		mp[key] = param.Value
+		mp[key] = value
 	}
 
 	return maps.Unflatten(mp, ps.config.Delimiter), nil
