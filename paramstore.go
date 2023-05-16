@@ -19,6 +19,7 @@ type Config struct {
 	Delimiter          string
 	Path               string
 	WithDecryption     bool
+	ParameterFilters   []types.ParameterStringFilter
 	AWSAccessKeyID     string
 	AWSSecretAccessKey string
 	AWSRoleARN         string
@@ -146,8 +147,9 @@ func (ps *ParamStore) Read() (map[string]interface{}, error) {
 
 	// Set SSM API call input
 	ps.input = ssm.GetParametersByPathInput{
-		Path:           aws.String(ps.config.Path),
-		WithDecryption: &ps.config.WithDecryption,
+		Path:             aws.String(ps.config.Path),
+		WithDecryption:   &ps.config.WithDecryption,
+		ParameterFilters: ps.config.ParameterFilters,
 	}
 
 	// Get parameters
