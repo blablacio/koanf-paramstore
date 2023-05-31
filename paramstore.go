@@ -234,11 +234,21 @@ func (ps *ParamStore) Watch(cb func(event interface{}, err error)) error {
 
 			// Check for updates
 			for _, newParam := range params {
+				var found bool
+
 				// Find parameter in previously saved parameters
 				for _, p := range ps.params {
-					if *p.ARN == *newParam.ARN && newParam.Version != p.Version {
-						updatedParams = append(updatedParams, newParam)
+					if *p.ARN == *newParam.ARN {
+						found = true
+
+						if newParam.Version != p.Version {
+							updatedParams = append(updatedParams, newParam)
+						}
 					}
+				}
+
+				if !found {
+					updatedParams = append(updatedParams, newParam)
 				}
 			}
 
